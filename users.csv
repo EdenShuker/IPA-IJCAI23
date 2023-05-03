@@ -1,0 +1,11 @@
+First name,Username,Contact Number,Manager,Email,Job Description,Level,Reason
+Samantha,Samantha_Sunflower,(555) 555-0123,John Smith,SamanthaSmith@test.com,Software Engineer,5,Poor performance
+Benjamin,Benjamin_Bear,(555) 555-4567,Jessica Williams,BenjaminWilliams@test.com,Data Scientist,6,
+Emily,Emily_Butterfly,(555) 555-8901,David Brown,EmilyBrown@test.com,Technical Project Manager,7,Misconduct
+Michael,Michael_Mountain,(555) 555-8102,Sarah Johnson,MichaelJohnson@test.com,DevOps Engineer,8,
+Olivia,Olivia_Ocean,(555) 555-8903,Michael Davis,OliviaDavis@test.com,Security Engineer,9,Detrimental behavior
+Ethan,Ethan_Eagle,(555) 555-9904,Rachel Anderson,EthanAnderson@test.com,Technical Writer,10,
+Sophia,Sophia_Sunshine,(555) 555-0905,Robert Garcia,SophiaGarcia@test.com,Quality Assurance Engineer,11,Position no longer necessary
+David,David_Dragon,(555) 555-8106,Lisa Martin,DavidMartin@test.com,Front-End Developer,12,
+Abigail,Abigail_Apple,(555) 555-8007,Thomas Rodriguez,AbigailRodriguez@test.com,Network Engineer,13,
+Alexander,Alexander_Asteroid,(555) 555-8208,Jennifer Thompson,AlexanderThompson@test.com,Cloud Architect,14,Violation of company policies
