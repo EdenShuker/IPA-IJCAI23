@@ -8,7 +8,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 
 CSV_FIELDS = ['First name', 'Username', 'Contact Number', 'Manager', 'Email', 'Job Description', 'Level', 'Reason']
-CSV_FIELDS_SIMILAR_MEANING = {'Username': ['Identifier']}
+# TODO: why identifier is not enough? why 'id' is not enough similar to 'identifier'
+CSV_FIELDS_SIMILAR_MEANING = {'Username': ['Identifier', 'Id']}
 users_file = Path(__file__).parent.parent / 'users.csv'
 nlp = spacy.load("en_core_web_lg")
 
@@ -23,13 +24,20 @@ def get_labels_names_to_inputs(web: WebDriver) -> dict[str, WebElement]:
     labels_to_inputs = {}
     labels = web.find_elements(By.TAG_NAME, 'label')
     for label in labels:
-        element = label
-        while True:
-            element = element.find_element(By.XPATH, '..')
-            if element.tag_name == 'fieldset':
-                break
-        input_element = element.find_elements(By.TAG_NAME, 'input')[0]
-        labels_to_inputs[label.text] = input_element
+        if label.text != '':
+            element = label
+            while True:
+                element = element.find_element(By.XPATH, '..')
+                if element.tag_name == 'fieldset':
+                    break
+            input_element = element.find_elements(By.TAG_NAME, 'input')[0]
+            labels_to_inputs[label.text] = input_element
+    inputs = web.find_elements(By.TAG_NAME, 'input')
+    for inp in inputs:
+        if inp.aria_role == 'textbox' and inp not in labels_to_inputs.values():
+            placeholder = inp.get_attribute('placeholder')
+            if placeholder != '':
+                labels_to_inputs[placeholder] = inp
 
     return labels_to_inputs
 
