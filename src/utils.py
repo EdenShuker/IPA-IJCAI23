@@ -1,5 +1,6 @@
 import csv
 import itertools
+from enum import Enum
 from pathlib import Path
 import spacy
 from spacy.tokens.doc import Doc
@@ -9,9 +10,17 @@ from selenium.webdriver.remote.webelement import WebElement
 
 CSV_FIELDS = ['First name', 'Username', 'Contact Number', 'Manager', 'Email', 'Job Description', 'Level', 'Reason']
 # TODO: why identifier is not enough? why 'id' is not enough similar to 'identifier'
-CSV_FIELDS_SIMILAR_MEANING = {'Username': ['Identifier', 'Id']}
+phrases_similar_meaning = {'Username': ['Identifier', 'Id'], 'Insert User': ['Add User'],
+                           'Delete User': ['Remove User']}
 users_file = Path(__file__).parent.parent / 'users.csv'
 nlp = spacy.load("en_core_web_lg")
+
+
+class Task(Enum):
+    BEGINNER = 1
+    ADVANCED = 2
+    PRO = 3
+    PRO_MAX = 4
 
 
 def get_users():
@@ -20,9 +29,18 @@ def get_users():
         return list(reader)
 
 
-def get_labels_names_to_inputs(web: WebDriver) -> dict[str, WebElement]:
+def get_closest_tag_to_element(root_element: WebElement, tag: str):
+    element = root_element
+    while True:
+        element = element.find_element(By.XPATH, '..')
+        children_tags_elements = element.find_elements(By.TAG_NAME, tag)
+        if children_tags_elements:
+            return children_tags_elements[0]
+
+
+def get_labels_names_to_inputs(root_element: WebElement) -> dict[str, WebElement]:
     labels_to_inputs = {}
-    labels = web.find_elements(By.TAG_NAME, 'label')
+    labels = root_element.find_elements(By.TAG_NAME, 'label')
     for label in labels:
         if label.text != '':
             element = label
@@ -32,7 +50,7 @@ def get_labels_names_to_inputs(web: WebDriver) -> dict[str, WebElement]:
                     break
             input_element = element.find_elements(By.TAG_NAME, 'input')[0]
             labels_to_inputs[label.text] = input_element
-    inputs = web.find_elements(By.TAG_NAME, 'input')
+    inputs = root_element.find_elements(By.TAG_NAME, 'input')
     for inp in inputs:
         if inp.aria_role == 'textbox' and inp not in labels_to_inputs.values():
             placeholder = inp.get_attribute('placeholder')
@@ -42,8 +60,8 @@ def get_labels_names_to_inputs(web: WebDriver) -> dict[str, WebElement]:
     return labels_to_inputs
 
 
-def get_submit_button(web: WebDriver):
-    buttons = web.find_elements(By.TAG_NAME, 'button')
+def get_submit_button(root_element: WebElement):
+    buttons = root_element.find_elements(By.TAG_NAME, 'button')
     submit_button = [b for b in buttons if b.text == 'Submit'][0]
 
     return submit_button
@@ -55,27 +73,69 @@ def start_challenge(web: WebDriver):
     start_button.click()
 
 
-def _get_label_field_similarity(label: Doc, field: Doc):
-    sim = label.similarity(field)
-    if field.text in CSV_FIELDS_SIMILAR_MEANING:
-        for f in CSV_FIELDS_SIMILAR_MEANING[field.text]:
-            sim = max(sim, label.similarity(nlp(f)))
+def _get_phrases_similarity(phrase1: Doc, phrase2: Doc):
+    sim = phrase1.similarity(phrase2)
+    if phrase2.text in phrases_similar_meaning:
+        for f in phrases_similar_meaning[phrase2.text]:
+            sim = max(sim, phrase1.similarity(nlp(f)))
 
     return sim
 
 
-def get_labels_to_csv_fields(labels):
-    labels_fields_similarity = {}
-    labels = [nlp(l) for l in labels]
-    fields = [nlp(f) for f in CSV_FIELDS]
-    for label, field in itertools.product(labels, fields):
-        labels_fields_similarity[(label.text, field.text)] = _get_label_field_similarity(label, field)
+def get_mapping_of_similar_phrases(group1: list[str], group2: list[str]):
+    pairing_similarities = {}
+    group1 = [nlp(phrase) for phrase in group1]
+    group2 = [nlp(phrase) for phrase in group2]
 
-    labels_fields_similarity = {k: v for k, v in
-                                sorted(labels_fields_similarity.items(), key=lambda item: -1 * item[1])}
-    labels_to_fields = {}
-    for (label, field), sim in labels_fields_similarity.items():
-        if label not in labels_to_fields and field not in labels_to_fields.values():
-            labels_to_fields[label] = field
+    for phrase1, phrase2 in itertools.product(group1, group2):
+        pairing_similarities[(phrase1.text, phrase2.text)] = _get_phrases_similarity(phrase1, phrase2)
 
-    return labels_to_fields
+    pairing_similarities = {k: v for k, v in sorted(pairing_similarities.items(), key=lambda item: -1 * item[1])}
+    mappings = {}
+    for (phrase1, phrase2), sim in pairing_similarities.items():
+        if phrase1 not in mappings and phrase2 not in mappings.values():
+            mappings[phrase1] = phrase2
+
+    return mappings
+
+
+def fill_form(form_element: WebElement, user: dict):
+    labels_to_inputs = get_labels_names_to_inputs(form_element)
+    assert len(set([i.id for i in labels_to_inputs.values()])) == len(
+        labels_to_inputs), "Wrong mapping of labels to inputs"
+    labels = list(labels_to_inputs.keys())
+    labels_to_fields = get_mapping_of_similar_phrases(labels, CSV_FIELDS)
+
+    for label, input_element in labels_to_inputs.items():
+        csv_field = labels_to_fields[label]
+        input_element.send_keys(user[csv_field])
+
+    submit_button = get_submit_button(form_element)
+    submit_button.click()
+
+
+def get_forms(web: WebDriver) -> tuple[WebElement, WebElement, WebElement]:
+    forms = web.find_elements(By.TAG_NAME, 'form')
+
+    search_form = [f for f in forms if f.find_element(By.TAG_NAME, 'button').text == 'Search'][0]
+
+    forms = set(forms) - {search_form}
+    title_to_form = {get_closest_tag_to_element(f, 'h3').text: f for f in forms}
+    expected_form_titles = ['Add User', 'Remove User']
+    mapping = get_mapping_of_similar_phrases(expected_form_titles, list(title_to_form.keys()))
+    add_form = title_to_form[mapping['Add User']]
+    remove_form = title_to_form[mapping['Remove User']]
+
+    return search_form, add_form, remove_form
+
+
+def is_user_exist_in_system(web: WebDriver, search_form: WebElement, username: str):
+    search_button = search_form.find_elements(By.XPATH, "//*[contains(text(), 'Search')]")[0]
+    search_textbox = search_form.find_element(By.TAG_NAME, 'input')
+    search_textbox.clear()
+    search_textbox.send_keys(username)
+    search_button.click()
+    answer_text = [p for p in web.find_elements(By.TAG_NAME, 'p') if 'Records Found' in p.text][0].text
+    user_exists = int(answer_text.split()[0]) == 1
+
+    return user_exists
