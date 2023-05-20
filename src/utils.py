@@ -7,9 +7,10 @@ from spacy.tokens.doc import Doc
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
 
 CSV_FIELDS = ['First name', 'Username', 'Contact Number', 'Manager', 'Email', 'Job Description', 'Level', 'Reason']
-# TODO: why identifier is not enough? why 'id' is not enough similar to 'identifier'
 phrases_similar_meaning = {'Username': ['Identifier', 'Id'], 'Insert User': ['Add User'],
                            'Delete User': ['Remove User']}
 users_file = Path(__file__).parent.parent / 'users.csv'
@@ -38,6 +39,13 @@ def get_closest_tag_to_element(root_element: WebElement, tag: str):
             return children_tags_elements[0]
 
 
+def wait_for_clickable(web: WebDriver, by: By, locator: str):
+    element = WebDriverWait(web, 20).until(expected_conditions.element_to_be_clickable((by, locator)))
+    element.click()
+
+    return element
+
+
 def get_labels_names_to_inputs(root_element: WebElement) -> dict[str, WebElement]:
     labels_to_inputs = {}
     labels = root_element.find_elements(By.TAG_NAME, 'label')
@@ -46,10 +54,13 @@ def get_labels_names_to_inputs(root_element: WebElement) -> dict[str, WebElement
             element = label
             while True:
                 element = element.find_element(By.XPATH, '..')
-                if element.tag_name == 'fieldset':
+                if element.tag_name == 'html':
                     break
-            input_element = element.find_elements(By.TAG_NAME, 'input')[0]
-            labels_to_inputs[label.text] = input_element
+                if element.tag_name == 'fieldset':
+                    input_element = element.find_elements(By.TAG_NAME, 'input')[0]
+                    labels_to_inputs[label.text] = input_element
+                    break
+
     inputs = root_element.find_elements(By.TAG_NAME, 'input')
     for inp in inputs:
         if inp.aria_role == 'textbox' and inp not in labels_to_inputs.values():
@@ -58,6 +69,19 @@ def get_labels_names_to_inputs(root_element: WebElement) -> dict[str, WebElement
                 labels_to_inputs[placeholder] = inp
 
     return labels_to_inputs
+
+
+def select_reason_dropdown(web: WebDriver, root_element: WebElement, user: dict):
+    user_reason = user['Reason']
+    try:
+        wait_for_clickable(web, By.XPATH, "//div[@role = 'button']")
+    except Exception:
+        pass
+    reason_options = root_element.find_elements(By.XPATH, "//li[@role = 'option']")
+    for option in reason_options:
+        if option.text == user_reason:
+            option.click()
+        break
 
 
 def get_submit_button(root_element: WebElement):
@@ -112,6 +136,11 @@ def fill_form(form_element: WebElement, user: dict):
 
     submit_button = get_submit_button(form_element)
     submit_button.click()
+
+
+def fill_remove_form_pro_max(web: WebDriver, form_element: WebElement, user: dict):
+    select_reason_dropdown(web, form_element, user)
+    fill_form(form_element, user)
 
 
 def get_forms(web: WebDriver) -> tuple[WebElement, WebElement, WebElement]:
